@@ -1,0 +1,5 @@
+{
+  "name": "Copy of VocalBridge: Video Translator",
+  "description": "An AI-powered application that translates videos from foreign languages (like Chinese) into high-quality Thai speech using Gemini's video understanding and text-to-speech capabilities.",
+  "requestFramePermissions": []
+}
