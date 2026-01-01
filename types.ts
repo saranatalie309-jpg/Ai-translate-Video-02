@@ -13,12 +13,14 @@ export type SettingsMode = 'auto' | 'manual';
 export type Gender = 'male' | 'female';
 export type Mood = 'natural' | 'cheerful' | 'excited' | 'soft' | 'serious' | 'isan';
 export type SpeechSpeed = 'normal' | 'sync';
+export type LanguageIntensity = 'polite' | 'normal' | 'rude';
 
 export interface VoiceSettings {
   mode: SettingsMode;
   gender: Gender;
   mood: Mood;
   speed: SpeechSpeed;
+  intensity: LanguageIntensity;
 }
 
 export interface TranslationResult {

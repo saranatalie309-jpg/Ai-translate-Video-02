@@ -19,14 +19,15 @@ const App: React.FC = () => {
   const [isIsanHooking, setIsIsanHooking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
-  
+
   const [currentAudioBuffer, setCurrentAudioBuffer] = useState<AudioBuffer | null>(null);
-  
+
   const [settings, setSettings] = useState<VoiceSettings>({
     mode: 'auto',
     gender: 'female',
     mood: 'natural',
-    speed: 'normal'
+    speed: 'normal',
+    intensity: 'normal'
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -92,7 +93,7 @@ const App: React.FC = () => {
 
     setErrorMessage(null);
     setFileName(file.name);
-    
+
     const reader = new FileReader();
     reader.onload = async () => {
       const b64 = (reader.result as string).split(',')[1];
@@ -137,11 +138,11 @@ const App: React.FC = () => {
       const text = await translateVideoContent(videoBase64, videoMimeType, settings, videoDuration);
       if (controller.signal.aborted) return;
       setTranslatedText(text);
-      
+
       setStep(ProcessingStep.GENERATING_VOICE);
       await refreshVoice(text, videoDuration, undefined, controller);
       if (controller.signal.aborted) return;
-      
+
       setStep(ProcessingStep.COMPLETED);
     } catch (error: any) {
       if (error.name === 'AbortError' || controller.signal.aborted) return;
@@ -155,7 +156,7 @@ const App: React.FC = () => {
     setIsHooking(true);
     setCurrentAudioBuffer(null);
     setErrorMessage(null);
-    
+
     const controller = new AbortController();
     processingAbortController.current = controller;
 
@@ -176,7 +177,7 @@ const App: React.FC = () => {
     setIsIsanHooking(true);
     setCurrentAudioBuffer(null);
     setErrorMessage(null);
-    
+
     const isanSettings: VoiceSettings = { ...settings, mood: 'isan' };
     setSettings(isanSettings);
 
@@ -184,7 +185,7 @@ const App: React.FC = () => {
     processingAbortController.current = controller;
 
     try {
-      const hookedText = await generateIsanHook(translatedText);
+      const hookedText = await generateIsanHook(translatedText, settings);
       if (controller.signal.aborted) return;
       setTranslatedText(hookedText);
       await refreshVoice(hookedText, undefined, isanSettings, controller);
@@ -199,24 +200,24 @@ const App: React.FC = () => {
     setIsRegenerating(true);
     setCurrentAudioBuffer(null);
     setErrorMessage(null);
-    
+
     const durationToUse = customDuration !== undefined ? customDuration : videoDuration;
     const settingsToUse = overrideSettings || settings;
 
     try {
       const pcmData = await generateThaiSpeech(textToUse, settingsToUse, durationToUse);
       if (controller?.signal.aborted) return;
-      
+
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       }
-      
+
       const audioBuffer = await decodePCMData(pcmData, audioContextRef.current);
       setCurrentAudioBuffer(audioBuffer);
     } catch (e: any) {
       console.error(e);
       if (controller?.signal.aborted) return;
-      
+
       // กรณี Error ที่ระบุว่า Entity not found มักเกิดจาก API Key มีปัญหา
       if (e.message?.includes("Requested entity was not found")) {
         setHasApiKey(false);
@@ -231,19 +232,19 @@ const App: React.FC = () => {
 
   const playTranslation = async () => {
     if (!audioContextRef.current || !currentAudioBuffer) return;
-    
+
     if (audioContextRef.current.state === 'suspended') {
       await audioContextRef.current.resume();
     }
 
     if (audioSourceRef.current) {
-      try { audioSourceRef.current.stop(); } catch(e) {}
+      try { audioSourceRef.current.stop(); } catch (e) { }
     }
 
     const source = audioContextRef.current.createBufferSource();
     source.buffer = currentAudioBuffer;
     source.connect(audioContextRef.current.destination);
-    
+
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
       videoRef.current.play();
@@ -261,10 +262,10 @@ const App: React.FC = () => {
 
   const stopTranslation = () => {
     if (audioSourceRef.current) {
-      try { audioSourceRef.current.stop(); } catch(e) {}
+      try { audioSourceRef.current.stop(); } catch (e) { }
     }
     if (videoRef.current) {
-      try { videoRef.current.pause(); } catch(e) {}
+      try { videoRef.current.pause(); } catch (e) { }
     }
     setIsPlaying(false);
   };
@@ -282,15 +283,15 @@ const App: React.FC = () => {
 
   const downloadVideo = async () => {
     if (!videoRef.current || !currentAudioBuffer || !audioContextRef.current) return;
-    
+
     setIsRecording(true);
     const stream = (videoRef.current as any).captureStream();
     const dest = audioContextRef.current.createMediaStreamDestination();
-    
+
     const source = audioContextRef.current.createBufferSource();
     source.buffer = currentAudioBuffer;
     source.connect(dest);
-    
+
     const combinedStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...dest.stream.getAudioTracks()
@@ -314,7 +315,7 @@ const App: React.FC = () => {
     source.start();
     videoRef.current.currentTime = 0;
     videoRef.current.play();
-    
+
     source.onended = () => {
       recorder.stop();
       if (videoRef.current) videoRef.current.pause();
@@ -393,7 +394,7 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col items-center py-12 px-4 bg-slate-50 relative">
       {/* API Key Selector Button (Top Right) */}
       <div className="absolute top-4 right-4 z-[60] flex flex-col items-end gap-2">
-        <button 
+        <button
           onClick={handleSelectApiKey}
           className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-xs transition-all shadow-md ${hasApiKey ? 'bg-white text-green-600 border border-green-100 hover:bg-green-50' : 'bg-orange-500 text-white hover:bg-orange-600'}`}
         >
@@ -402,9 +403,9 @@ const App: React.FC = () => {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </button>
         {!hasApiKey && (
-          <a 
-            href="https://ai.google.dev/gemini-api/docs/billing" 
-            target="_blank" 
+          <a
+            href="https://ai.google.dev/gemini-api/docs/billing"
+            target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-slate-400 underline hover:text-blue-500 transition-colors"
           >
@@ -459,12 +460,12 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 {settings.mode === 'manual' && (
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <label className="text-sm font-semibold text-slate-500 block mb-2">อารมณ์/สำเนียง (Mood/Dialect)</label>
-                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                      {(Object.keys(moodLabels) as Mood[]).map((m) => (
-                        <button key={m} onClick={() => updateSettings('mood', m)} className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${settings.mood === m ? 'bg-green-100 border-green-300 text-green-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{moodLabels[m]}</button>
-                      ))}
+                  <div>
+                    <label className="text-sm font-semibold text-slate-500 block mb-2">ความแรงของภาษา (Intensity)</label>
+                    <div className="flex bg-white p-1 rounded-xl border border-slate-200">
+                      <button onClick={() => updateSettings('intensity', 'polite')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${settings.intensity === 'polite' ? 'bg-green-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>สุภาพ</button>
+                      <button onClick={() => updateSettings('intensity', 'normal')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${settings.intensity === 'normal' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>ปานกลาง</button>
+                      <button onClick={() => updateSettings('intensity', 'rude')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${settings.intensity === 'rude' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>หยาบ/ขิง</button>
                     </div>
                   </div>
                 )}
@@ -498,7 +499,7 @@ const App: React.FC = () => {
 
             {videoBase64 && (
               <div className="mt-10 flex justify-center">
-                <button 
+                <button
                   onClick={startProcessing}
                   className="group relative flex items-center bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-16 py-5 rounded-2xl font-bold text-xl hover:scale-105 transition-all shadow-2xl shadow-blue-200 active:scale-95"
                 >
@@ -521,8 +522,8 @@ const App: React.FC = () => {
               {step === ProcessingStep.GENERATING_VOICE && "กำลังสร้างเสียง AI พากย์ไทย..."}
             </h3>
             <p className="text-slate-400 mt-4 text-sm font-medium">กรุณารอสักครู่ ระบบกำลังทำงานอย่างเต็มกำลัง</p>
-            
-            <button 
+
+            <button
               onClick={handleCancel}
               className="mt-10 flex items-center text-slate-500 hover:text-red-500 font-bold transition-all border border-slate-200 hover:border-red-100 hover:bg-red-50 px-8 py-3 rounded-full group"
             >
@@ -540,7 +541,7 @@ const App: React.FC = () => {
               <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner relative group border border-slate-200">
                 <video ref={videoRef} src={videoUrl || ""} className="w-full h-full object-contain" muted playsInline />
               </div>
-              
+
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
                 <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ปรับแต่งพากย์ใหม่ (Quick-tune)</h5>
                 <div className="grid grid-cols-2 gap-4">
@@ -556,6 +557,14 @@ const App: React.FC = () => {
                     <div className="flex bg-white p-1 rounded-lg border border-slate-200">
                       <button onClick={() => updateSettings('speed', 'normal')} className={`flex-1 py-1 text-[10px] rounded ${settings.speed === 'normal' ? 'bg-orange-500 text-white' : 'text-slate-500'}`}>ปกติ</button>
                       <button onClick={() => updateSettings('speed', 'sync')} className={`flex-1 py-1 text-[10px] rounded ${settings.speed === 'sync' ? 'bg-orange-500 text-white' : 'text-slate-500'}`}>สัมพันธ์</button>
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-bold text-slate-400 mb-1 block">ความแรงของภาษา</label>
+                    <div className="flex bg-white p-1 rounded-lg border border-slate-200">
+                      <button onClick={() => updateSettings('intensity', 'polite')} className={`flex-1 py-1 text-[10px] rounded ${settings.intensity === 'polite' ? 'bg-green-500 text-white' : 'text-slate-500'}`}>สุภาพ</button>
+                      <button onClick={() => updateSettings('intensity', 'normal')} className={`flex-1 py-1 text-[10px] rounded ${settings.intensity === 'normal' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>ปกติ</button>
+                      <button onClick={() => updateSettings('intensity', 'rude')} className={`flex-1 py-1 text-[10px] rounded ${settings.intensity === 'rude' ? 'bg-red-500 text-white' : 'text-slate-500'}`}>หยาบ</button>
                     </div>
                   </div>
                   <div className="col-span-2">
@@ -593,7 +602,7 @@ const App: React.FC = () => {
                 {isRegenerating && <span className="text-xs text-blue-500 animate-pulse bg-blue-50 px-2 py-1 rounded-full">กำลังอัพเดทเสียงพากย์...</span>}
               </h4>
               <textarea value={translatedText} onChange={(e) => setTranslatedText(e.target.value)} className="flex-1 w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none resize-none mb-4 leading-relaxed text-lg" placeholder="พิมพ์คำแปลที่ต้องการแก้ไขที่นี่..." />
-              
+
               {errorMessage && (
                 <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-medium animate-in fade-in slide-in-from-top-2">
                   <p className="font-bold mb-1 uppercase tracking-tight">⚠️ เกิดข้อผิดพลาด</p>
@@ -603,8 +612,8 @@ const App: React.FC = () => {
 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <button 
-                    onClick={applyAIHook} 
+                  <button
+                    onClick={applyAIHook}
                     disabled={isHooking || isIsanHooking || isRegenerating}
                     className="flex-1 bg-gradient-to-r from-orange-500 to-red-600 text-white py-4 px-2 rounded-2xl font-black text-sm hover:shadow-xl hover:shadow-orange-200 hover:scale-[1.02] transition-all flex items-center justify-center group disabled:opacity-50"
                   >
@@ -616,15 +625,15 @@ const App: React.FC = () => {
                     {isHooking ? 'กำลังปรุง...' : 'TikTok AI Hook'}
                   </button>
 
-                  <button 
-                    onClick={applyIsanHook} 
+                  <button
+                    onClick={applyIsanHook}
                     disabled={isIsanHooking || isHooking || isRegenerating}
                     className="flex-1 bg-gradient-to-r from-yellow-500 to-amber-700 text-white py-4 px-2 rounded-2xl font-black text-sm hover:shadow-xl hover:shadow-yellow-200 hover:scale-[1.02] transition-all flex items-center justify-center group disabled:opacity-50"
                   >
                     {isIsanHooking ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
                     ) : (
-                      <svg className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z"/></svg>
+                      <svg className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z" /></svg>
                     )}
                     {isIsanHooking ? 'เบิ่งแน...' : 'Hook สไตล์อิสาน'}
                   </button>
@@ -635,8 +644,8 @@ const App: React.FC = () => {
                     <span>เจ็นเสียงพากย์ใหม่</span>
                     <span className="text-[10px] font-normal opacity-60">(หลังแก้คำแปล)</span>
                   </button>
-                  <button 
-                    onClick={isPlaying ? stopTranslation : playTranslation} 
+                  <button
+                    onClick={isPlaying ? stopTranslation : playTranslation}
                     disabled={isRegenerating || isHooking || isIsanHooking || !currentAudioBuffer}
                     className={`${isPlaying ? 'bg-red-500' : 'bg-indigo-600'} text-white py-4 rounded-2xl font-bold hover:opacity-90 transition-all shadow-lg flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed`}
                   >
