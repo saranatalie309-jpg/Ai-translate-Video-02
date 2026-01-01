@@ -23,7 +23,7 @@ const cleanTextForSpeech = (text: string): string => {
     .replace(/["']/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  
+
   if (cleaned.length > 800) {
     cleaned = cleaned.substring(0, 797) + "...";
   }
@@ -39,34 +39,41 @@ const safetySettings = [
 ];
 
 export const translateVideoContent = async (
-  videoBase64: string, 
+  videoBase64: string,
   mimeType: string,
   settings: VoiceSettings,
   duration?: number
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  const speedInstruction = settings.speed === 'sync' && duration 
-    ? `IMPORTANT: The video is ${duration.toFixed(1)}s long. Summarize and translate into Thai VERY SHORT and PUNCHY.` 
+
+  const speedInstruction = settings.speed === 'sync' && duration
+    ? `IMPORTANT: The video is ${duration.toFixed(1)}s long. Summarize and translate into Thai VERY SHORT and PUNCHY.`
     : "Translate into Thai naturally.";
 
-  const dialectInstruction = settings.mood === 'isan' 
+  const dialectInstruction = settings.mood === 'isan'
     ? "Use Isan dialect."
     : "Use standard Thai.";
+
+  const intensityInstruction = settings.intensity === 'polite'
+    ? "Use extremely polite and formal Thai (incl. krup/ka). NO PROFANITY."
+    : settings.intensity === 'rude'
+      ? "Use high-impact street slang, profanity (คำหยาบ/ภาษาพ่อขุน) and strong language to make it raw and authentic."
+      : "Use natural, everyday Thai.";
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: {
       parts: [
         { inlineData: { data: videoBase64, mimeType: mimeType } },
-        { text: `Analyze video content. ${dialectInstruction} ${speedInstruction} Tone: ${moodToEnglish(settings.mood)}. 
-        IMPORTANT: You ARE ALLOWED to use strong language, street slang, and profanity (คำหยาบ/ภาษาพ่อขุน) if it fits the context or mood of the video to make it authentic and high-impact. 
+        {
+          text: `Analyze video content. ${dialectInstruction} ${speedInstruction} Tone: ${moodToEnglish(settings.mood)}. 
+        ${intensityInstruction}
         Return ONLY the Thai translated text without any explanations.` }
       ]
     },
-    config: { 
+    config: {
       temperature: 0.8,
-      safetySettings 
+      safetySettings
     }
   });
 
@@ -80,16 +87,23 @@ export const generateThaiHook = async (
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const dialectContext = settings.mood === 'isan' ? "ภาษาอีสาน" : "ภาษาไทย";
 
+  const intensityInstruction = settings.intensity === 'polite'
+    ? "เน้นความสุภาพ อ่อนโยน และไม่ใช้คำหยาบ"
+    : settings.intensity === 'rude'
+      ? "ใช้คำที่ดุดัน มีพลัง (Impact) ใช้แสลงหรือคำหยาบ (Profanity) ได้เต็มที่เพื่อให้เป็นที่จดจำ"
+      : "เน้นความเป็นกันเองและดูเป็นธรรมชาติ";
+
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `สรุปและเรียบเรียงข้อความนี้ให้เป็น "คำโปรย (Hook)" สำหรับ TikTok ใน${dialectContext} 
-    เน้นความกระชับและดึงดูดใจสูงสุด 
-    หมายเหตุ: สามารถใช้คำหยาบ ภาษาปาก หรือแสลง (Street slang/Profanity) ได้อย่างเต็มที่เพื่อให้ได้อารมณ์และยอดวิว (Make it raw and real).
+    contents: `สรุปและเรียบเรียงข้อความนี้ให้เป็น "คำโปรย (Hook)" สำหรับ TikTok ใน ${dialectContext} 
+    ${intensityInstruction}
+    เน้นความน่าสนใจ มีพลัง (Impact) และดึงดูดใจสูงสุด 
+    ให้นำเสนอดูเป็นธรรมชาติ มีจังหวะที่น่าตื่นเต้น (Edgy and Engaging) 
     ข้อความต้นฉบับ: "${currentText}"
-    คำตอบ: (เฉพาะข้อความที่สรุปแล้วเท่านั้น)` ,
-    config: { 
+    คำตอบ: (เฉพาะข้อความที่เรียบเรียงแล้วเท่านั้น ไม่ต้องสั้นมากเกินไปเอาที่ได้อารมณ์)` ,
+    config: {
       temperature: 0.9,
-      safetySettings 
+      safetySettings
     }
   });
 
@@ -97,19 +111,26 @@ export const generateThaiHook = async (
 };
 
 export const generateIsanHook = async (
-  currentText: string
+  currentText: string,
+  settings: VoiceSettings
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const intensityInstruction = settings.intensity === 'polite'
+    ? "เน้นความสุภาพ อ่อนเย็น (มีคำว่า จ้า, น้อ) และไม่ใช้คำหยาบเลย"
+    : settings.intensity === 'rude'
+      ? "เน้นความม่วนซื่น ความดิบ และความเป็นกันเองแบบถึงพริกถึงขิง ใช้คำหยาบอีสานหรือคำแสลงบ้านๆ ได้เต็มที่เพื่อให้ดูสะใจ"
+      : "เน้นภาษาอีสานที่เป็นกันเอง ดูเป็นธรรมชาติ เหมือนคนบ้านเดียวกันคุยกัน";
+
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `สรุปและเรียบเรียงข้อความนี้ให้เป็น "คำโปรย (Hook)" สไตล์ภาษาอีสานที่ม่วนๆ จ๊วดๆ สำหรับ TikTok 
-    เน้นความสั้นและกระชับ 
-    หมายเหตุ: สามารถใช้คำหยาบอีสาน ภาษาปาก หรือคำแสลงบ้านๆ ได้เต็มที่เพื่อให้ดูเรียลและสะใจ (Be authentic, use strong Isan words if needed).
+    contents: `สรุปและเรียบเรียงข้อความนี้ให้เป็น "คำโปรย (Hook)" สไตล์ภาษาอีสานที่ม่วนๆ และมีพลังสำหรับ TikTok 
+    ${intensityInstruction}
     ข้อความต้นฉบับ: "${currentText}"
-    คำตอบ: (เฉพาะข้อความภาษาอีสานเท่านั้น)` ,
-    config: { 
+    คำตอบ: (เฉพาะข้อความภาษาอีสานที่เรียบเรียงแล้วเท่านั้น ไม่ต้องสั้นมากเกินไปเอาที่จ๊วดๆตามระดับความแรงที่กำหนด)` ,
+    config: {
       temperature: 0.9,
-      safetySettings 
+      safetySettings
     }
   });
 
@@ -117,7 +138,7 @@ export const generateIsanHook = async (
 };
 
 export const generateThaiSpeech = async (
-  text: string, 
+  text: string,
   settings: VoiceSettings,
   duration?: number,
   retryAttempt: number = 0
@@ -137,8 +158,14 @@ export const generateThaiSpeech = async (
     ? `Duration target: ${duration.toFixed(1)}s`
     : "Natural speed";
 
+  const intensityInstruction = settings.intensity === 'polite'
+    ? "Speak politely and clearly. No rough words."
+    : settings.intensity === 'rude'
+      ? "Speak with high energy and raw emotion. Do not censor any words including slang or strong language."
+      : "Speak naturally.";
+
   const simplePrompt = `Speak this text: "${cleanedText}". Tone: ${mood}. ${rateInstruction}. 
-  Speak clearly even if there are strong words or slang. Do not censor any words.`;
+  ${intensityInstruction}`;
 
   try {
     const response = await ai.models.generateContent({
@@ -157,8 +184,19 @@ export const generateThaiSpeech = async (
 
     const candidate = response.candidates?.[0];
     if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
-      if (retryAttempt < 2) return generateThaiSpeech(cleanedText, settings, duration, retryAttempt + 1);
-      throw new Error(`การสร้างเสียงถูกระงับ (${candidate.finishReason})`);
+      console.warn(`[Gemini TTS] การสร้างเสียงหยุดทำงานกะทันหัน: ${candidate.finishReason}`);
+      console.warn(`[Gemini TTS] ข้อความที่เป็นสาเหตุ: "${cleanedText}"`);
+
+      if (retryAttempt < 2) {
+        console.log(`[Gemini TTS] กำลังลองพยายามครั้งใหม่ (ครั้งที่ ${retryAttempt + 1})...`);
+        return generateThaiSpeech(cleanedText, settings, duration, retryAttempt + 1);
+      }
+
+      const errorMessage = candidate.finishReason === 'OTHER'
+        ? `การสร้างเสียงถูกระงับ (OTHER) - เป็นไปได้ว่าในข้อความมีคำที่ระบบความปลอดภัยของ AI ปฏิเสธที่จะออกเสียง (แม้จะปิด Filter แล้วก็ตาม)`
+        : `การสร้างเสียงถูกระงับ (${candidate.finishReason})`;
+
+      throw new Error(errorMessage);
     }
 
     const audioPart = candidate?.content?.parts?.find(p => p.inlineData?.data);
